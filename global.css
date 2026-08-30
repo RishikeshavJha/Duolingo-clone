@@ -1,0 +1,47 @@
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
+@import "tailwindcss/utilities.css";
+@import "nativewind/theme";
+
+/* Keep matching TypeScript values in src/theme/tokens.ts for non-CSS consumers. */
+@layer theme {
+  @theme {
+    --color-lingua-purple: #6c4ef5;
+    --color-lingua-deep-purple: #5b3bf6;
+    --color-lingua-blue: #4d8bff;
+    --color-lingua-green: #21c16b;
+    --color-success: #21c16b;
+    --color-warning: #ffc800;
+    --color-streak: #ff8a00;
+    --color-error: #ff4d4f;
+    --color-info: #4d8bff;
+    --color-text-primary: #0d132b;
+    --color-text-secondary: #6b7280;
+    --color-border: #e5e7eb;
+    --color-surface: #f6f7fb;
+    --color-background: #ffffff;
+    --font-poppins: "Poppins-Regular";
+    --font-poppins-medium: "Poppins-Medium";
+    --font-poppins-semibold: "Poppins-SemiBold";
+    --font-poppins-bold: "Poppins-Bold";
+    --radius-card: 20px;
+    --radius-control: 14px;
+    --radius-pill: 9999px;
+    --shadow-card: 0 8px 24px rgb(13 19 43 / 0.06);
+    --shadow-button: 0 5px 0 rgb(91 59 246);
+  }
+}
+
+@utility ds-screen { @apply flex-1 bg-background; }
+@utility ds-card { @apply rounded-card border border-border bg-background p-5 shadow-card; }
+@utility ds-button-primary { @apply items-center justify-center rounded-control bg-lingua-purple px-5 py-3 shadow-button; }
+
+@utility ds-button-label { font-family: "Poppins-SemiBold"; font-size: 16px; line-height: 22.4px; color: #ffffff; }
+@utility h1 { font-family: "Poppins-Bold"; font-size: 32px; line-height: 38.4px; color: #0d132b; }
+@utility h2 { font-family: "Poppins-SemiBold"; font-size: 24px; line-height: 31.2px; color: #0d132b; }
+@utility h3 { font-family: "Poppins-SemiBold"; font-size: 20px; line-height: 26px; color: #0d132b; }
+@utility h4 { font-family: "Poppins-Medium"; font-size: 16px; line-height: 22.4px; color: #0d132b; }
+@utility body-lg { font-family: "Poppins-Regular"; font-size: 16px; line-height: 25.6px; color: #0d132b; }
+@utility body-md { font-family: "Poppins-Regular"; font-size: 14px; line-height: 22.4px; color: #0d132b; }
+@utility body-sm { font-family: "Poppins-Regular"; font-size: 13px; line-height: 20.8px; color: #6b7280; }
+@utility caption { font-family: "Poppins-Regular"; font-size: 11px; line-height: 15.4px; color: #6b7280; }
