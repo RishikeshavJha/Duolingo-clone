@@ -6,6 +6,7 @@ import {
   Animated,
   Keyboard,
   KeyboardEvent,
+  Modal,
   Platform,
   StyleSheet,
   TextInput,
@@ -15,9 +16,9 @@ type VerificationModalProps = {
   email: string;
   visible: boolean;
   mode: "sign-up" | "sign-in";
-  // Clerk resource objects passed down from auth-screen
-  signIn: ReturnType<typeof import("@clerk/expo").useSignIn>["signIn"];
-  signUp: ReturnType<typeof import("@clerk/expo").useSignUp>["signUp"];
+  signIn: any;
+  signUp: any;
+  setActive?: ((params: { session: string | null }) => Promise<void>) | null;
   onClose?: () => void;
 };
 
@@ -27,6 +28,7 @@ export function VerificationModal({
   mode,
   signIn,
   signUp,
+  setActive,
   onClose,
 }: VerificationModalProps) {
   const router = useRouter();
@@ -37,10 +39,10 @@ export function VerificationModal({
   const [verifyError, setVerifyError] = useState<string | null>(null);
 
   // Smooth fade-in for the full-screen dimmed off-color backdrop
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const [fadeAnim] = useState(() => new Animated.Value(0));
 
   // Keyboard offset animation so the card sits directly above the keypad
-  const keyboardOffset = useRef(new Animated.Value(0)).current;
+  const [keyboardOffset] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     const handleKeyboardShow = (e: KeyboardEvent) => {
@@ -85,6 +87,7 @@ export function VerificationModal({
 
   useEffect(() => {
     if (visible) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCode("");
       setVerifyError(null);
       Animated.timing(fadeAnim, {
@@ -116,7 +119,6 @@ export function VerificationModal({
 
     try {
       if (mode === "sign-up") {
-        // Verify the email code from Clerk for sign-up
         const { error } = await signUp.verifications.verifyEmailCode({
           code: enteredCode,
         });
@@ -129,17 +131,20 @@ export function VerificationModal({
         }
 
         if (signUp.status === "complete") {
-          await signUp.finalize({
-            navigate: ({ session }) => {
-              inputRef.current?.blur();
-              Keyboard.dismiss();
-              if (onClose) onClose();
-              setTimeout(() => router.replace("/"), 150);
-            },
-          });
+          inputRef.current?.blur();
+          Keyboard.dismiss();
+          if (signUp.createdSessionId && setActive) {
+            await setActive({ session: signUp.createdSessionId });
+          }
+          await signUp.finalize();
+          if (onClose) onClose();
+          setTimeout(() => router.replace("/"), 150);
+        } else {
+          setVerifyError("Verification incomplete. Please check your code.");
+          setCode("");
+          inputRef.current?.focus();
         }
       } else {
-        // Sign-in second factor (MFA) verification
         const { error } = await signIn.mfa.verifyEmailCode({ code: enteredCode });
 
         if (error) {
@@ -150,18 +155,28 @@ export function VerificationModal({
         }
 
         if (signIn.status === "complete") {
-          await signIn.finalize({
-            navigate: ({ session }) => {
-              inputRef.current?.blur();
-              Keyboard.dismiss();
-              if (onClose) onClose();
-              setTimeout(() => router.replace("/"), 150);
-            },
-          });
+          inputRef.current?.blur();
+          Keyboard.dismiss();
+          if (signIn.createdSessionId && setActive) {
+            await setActive({ session: signIn.createdSessionId });
+          }
+          await signIn.finalize();
+          if (onClose) onClose();
+          setTimeout(() => router.replace("/"), 150);
+        } else {
+          setVerifyError("Verification incomplete. Please check your code.");
+          setCode("");
+          inputRef.current?.focus();
         }
       }
-    } catch (e: any) {
-      setVerifyError("Verification failed. Please try again.");
+    } catch (err: any) {
+      console.error("Verification error:", err);
+      const msg =
+        err?.errors?.[0]?.longMessage ||
+        err?.errors?.[0]?.message ||
+        err?.message ||
+        "Invalid code. Please try again.";
+      setVerifyError(msg);
       setCode("");
       inputRef.current?.focus();
     } finally {
@@ -186,10 +201,15 @@ export function VerificationModal({
     setVerifyError(null);
     try {
       if (mode === "sign-up") {
-        await signUp.verifications.sendEmailCode();
+        const { error } = await signUp.verifications.sendEmailCode();
+        if (error) setVerifyError(error.message ?? "Could not resend code.");
+      } else {
+        const { error } = await signIn.mfa.sendEmailCode();
+        if (error) setVerifyError(error.message ?? "Could not resend code.");
       }
-    } catch {
-      // Silent - code resent
+    } catch (err: any) {
+      const msg = err?.message || "Could not resend code.";
+      setVerifyError(msg);
     }
     inputRef.current?.focus();
   };
@@ -209,20 +229,27 @@ export function VerificationModal({
   if (!visible) return null;
 
   return (
-    <View style={styles.overlayRoot}>
-      {/* Full-screen off-color dimmed backdrop covering 100% of the display */}
-      <Animated.View
-        style={[
-          StyleSheet.absoluteFill,
-          styles.backdrop,
-          { opacity: fadeAnim },
-        ]}
-      >
-        <Pressable
-          style={StyleSheet.absoluteFill}
-          onPress={handleDismiss}
-        />
-      </Animated.View>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"
+      statusBarTranslucent
+      onRequestClose={handleDismiss}
+    >
+      <View style={styles.overlayRoot}>
+        {/* Full-screen off-color dimmed backdrop covering 100% of the display */}
+        <Animated.View
+          style={[
+            StyleSheet.absoluteFill,
+            styles.backdrop,
+            { opacity: fadeAnim },
+          ]}
+        >
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={handleDismiss}
+          />
+        </Animated.View>
 
       {/* Animated container that lifts the card directly above the keypad */}
       <Animated.View
@@ -337,7 +364,8 @@ export function VerificationModal({
         </View>
       </Animated.View>
     </View>
-  );
+  </Modal>
+);
 }
 
 const styles = StyleSheet.create({

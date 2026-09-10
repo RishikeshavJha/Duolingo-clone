@@ -1,6 +1,6 @@
 import { images } from "@/constants/images";
 import { Pressable, Text, View } from "@/tw";
-import { useSignIn, useSignUp, useSSO } from "@clerk/expo";
+import { useClerk, useSignIn, useSignUp, useSSO } from "@clerk/expo";
 import { Image } from "expo-image";
 import { Link, useRouter } from "expo-router";
 import { useRef, useState } from "react";
@@ -40,13 +40,17 @@ export function AuthScreen({ mode }: AuthScreenProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [showVerification, setShowVerification] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const { signIn, errors: signInErrors, fetchStatus: signInFetchStatus } = useSignIn();
-  const { signUp, errors: signUpErrors, fetchStatus: signUpFetchStatus } = useSignUp();
+  const { signIn, fetchStatus: signInFetchStatus } = useSignIn();
+  const { signUp, fetchStatus: signUpFetchStatus } = useSignUp();
+  const { setActive } = useClerk();
   const { startSSOFlow } = useSSO();
 
   const isFetching =
-    signInFetchStatus === "fetching" || signUpFetchStatus === "fetching";
+    isLoading ||
+    signInFetchStatus === "fetching" ||
+    signUpFetchStatus === "fetching";
 
   const title = isSignUp ? "Create your account" : "Welcome back";
   const subtitle = isSignUp
@@ -118,62 +122,121 @@ export function AuthScreen({ mode }: AuthScreenProps) {
     if (hasError) return;
 
     setApiError(null);
+    setIsLoading(true);
 
-    if (isSignUp) {
-      // Split name into first and last if provided
-      const nameParts = trimmedName.split(" ");
-      const firstName = nameParts[0];
-      const lastName = nameParts.slice(1).join(" ") || undefined;
+    try {
+      if (isSignUp) {
+        const nameParts = trimmedName.split(" ");
+        const firstName = nameParts[0];
+        const lastName = nameParts.slice(1).join(" ") || undefined;
 
-      // Sign Up flow with Name
-      const { error } = await signUp.password({
-        emailAddress: trimmedEmail,
-        password,
-        firstName,
-        lastName,
-      });
-      if (error) {
-        setApiError(error.message ?? "Sign up failed. Please try again.");
-        return;
-      }
-      // Send verification email
-      await signUp.verifications.sendEmailCode();
-      setShowVerification(true);
-    } else {
-      // Sign In flow
-      const { error } = await signIn.password({
-        emailAddress: trimmedEmail,
-        password,
-      });
-      if (error) {
-        setApiError(error.message ?? "Sign in failed. Please check your credentials.");
-        return;
-      }
-      if (signIn.status === "complete") {
-        await signIn.finalize({ navigate: () => router.replace("/") });
-      } else if (signIn.status === "needs_second_factor") {
+        console.log("Attempting signUp.create for:", trimmedEmail);
+        const { error } = await signUp.create({
+          emailAddress: trimmedEmail,
+          password,
+          firstName,
+          lastName,
+        });
+
+        if (error) {
+          console.error("signUp.create error:", error);
+          setApiError(error.message ?? "Sign up failed. Please try again.");
+          return;
+        }
+
+        console.log("signUp.create success, status:", signUp.status);
+
+        if (signUp.status === "complete") {
+          if (signUp.createdSessionId && setActive) {
+            await setActive({ session: signUp.createdSessionId });
+          }
+          await signUp.finalize();
+          router.replace("/");
+          return;
+        }
+
+        // Send verification email
+        const { error: sendCodeError } = await signUp.verifications.sendEmailCode();
+        if (sendCodeError) {
+          console.error("sendEmailCode error:", sendCodeError);
+          setApiError(sendCodeError.message ?? "Failed to send verification code.");
+          return;
+        }
+
         setShowVerification(true);
+      } else {
+        console.log("Attempting signIn.password for:", trimmedEmail);
+        const { error } = await signIn.password({
+          emailAddress: trimmedEmail,
+          password,
+        });
+
+        if (error) {
+          console.error("signIn.password error:", error);
+          setApiError(error.message ?? "Sign in failed. Please check your credentials.");
+          return;
+        }
+
+        console.log("signIn.password success, status:", signIn.status);
+
+        if (signIn.status === "complete") {
+          if (signIn.createdSessionId && setActive) {
+            await setActive({ session: signIn.createdSessionId });
+          }
+          await signIn.finalize();
+          router.replace("/");
+        } else if (
+          signIn.status === "needs_second_factor" ||
+          signIn.status === "needs_client_trust" ||
+          signIn.status === "needs_first_factor"
+        ) {
+          console.log("Device verification needed (status: " + signIn.status + "), sending email code...");
+          const { error: mfaError } = await signIn.mfa.sendEmailCode();
+          if (mfaError) {
+            console.log("Notice from sendEmailCode:", mfaError.message);
+          }
+          setShowVerification(true);
+        } else {
+          setApiError(`Sign in status: ${signIn.status}`);
+        }
       }
+    } catch (err: any) {
+      console.error("Auth submission error:", err);
+      const msg =
+        err?.errors?.[0]?.longMessage ||
+        err?.errors?.[0]?.message ||
+        err?.message ||
+        "An unexpected error occurred during authentication.";
+      setApiError(msg);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleSocialAuth = async (strategy: "oauth_google" | "oauth_facebook" | "oauth_apple") => {
     try {
-      const { createdSessionId, setActive, signUp } = await startSSOFlow({
+      setIsLoading(true);
+      setApiError(null);
+      const { createdSessionId, setActive: setSSOActive, signUp: ssoSignUp } = await startSSOFlow({
         strategy,
       });
 
       if (createdSessionId) {
-        await setActive!({ session: createdSessionId });
+        const activeFn = setSSOActive || setActive;
+        if (activeFn) {
+          await activeFn({ session: createdSessionId });
+        }
         router.replace("/");
-      } else if (signUp?.status === "missing_requirements") {
+      } else if (ssoSignUp?.status === "missing_requirements") {
         setApiError("Cannot complete sign-in. Missing account requirements.");
       }
     } catch (err: any) {
       if (err.code === "SIGN_IN_CANCELLED" || err.code === "-5") return; // user cancelled
       console.error("SSO error:", JSON.stringify(err, null, 2));
       const clerkMsg = err?.errors?.[0]?.long_message || err?.errors?.[0]?.message || err?.message;
-      setApiError(clerkMsg || "Authentication failed.");
+      setApiError(clerkMsg || "Social authentication failed.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -234,14 +297,12 @@ export function AuthScreen({ mode }: AuthScreenProps) {
                       onPress={() => fullNameInputRef.current?.focus()}
                       android_ripple={{ color: "transparent" }}
                       style={({ pressed }) => [{ opacity: 1 }]}
-                      className={`rounded-[16px] border ${
-                        fullNameError ? "border-[#FF4D4F] bg-[#FFF8F8]" : "border-[#EEF0F5] bg-white"
-                      } px-4 py-2`}
+                      className={`rounded-[16px] border ${fullNameError ? "border-[#FF4D4F] bg-[#FFF8F8]" : "border-[#EEF0F5] bg-white"
+                        } px-4 py-2`}
                     >
                       <Text
-                        className={`font-poppins-medium text-[11.5px] leading-4 ${
-                          fullNameError ? "text-[#FF4D4F]" : "text-[#75809D]"
-                        }`}
+                        className={`font-poppins-medium text-[11.5px] leading-4 ${fullNameError ? "text-[#FF4D4F]" : "text-[#75809D]"
+                          }`}
                       >
                         Full Name
                       </Text>
@@ -279,14 +340,12 @@ export function AuthScreen({ mode }: AuthScreenProps) {
                     onPress={() => emailInputRef.current?.focus()}
                     android_ripple={{ color: "transparent" }}
                     style={({ pressed }) => [{ opacity: 1 }]}
-                    className={`rounded-[16px] border ${
-                      emailError ? "border-[#FF4D4F] bg-[#FFF8F8]" : "border-[#EEF0F5] bg-white"
-                    } px-4 py-2`}
+                    className={`rounded-[16px] border ${emailError ? "border-[#FF4D4F] bg-[#FFF8F8]" : "border-[#EEF0F5] bg-white"
+                      } px-4 py-2`}
                   >
                     <Text
-                      className={`font-poppins-medium text-[11.5px] leading-4 ${
-                        emailError ? "text-[#FF4D4F]" : "text-[#75809D]"
-                      }`}
+                      className={`font-poppins-medium text-[11.5px] leading-4 ${emailError ? "text-[#FF4D4F]" : "text-[#75809D]"
+                        }`}
                     >
                       Email
                     </Text>
@@ -325,14 +384,12 @@ export function AuthScreen({ mode }: AuthScreenProps) {
                     onPress={() => passwordInputRef.current?.focus()}
                     android_ripple={{ color: "transparent" }}
                     style={({ pressed }) => [{ opacity: 1 }]}
-                    className={`rounded-[16px] border ${
-                      passwordError ? "border-[#FF4D4F] bg-[#FFF8F8]" : "border-[#EEF0F5] bg-white"
-                    } px-4 py-2`}
+                    className={`rounded-[16px] border ${passwordError ? "border-[#FF4D4F] bg-[#FFF8F8]" : "border-[#EEF0F5] bg-white"
+                      } px-4 py-2`}
                   >
                     <Text
-                      className={`font-poppins-medium text-[11.5px] leading-4 ${
-                        passwordError ? "text-[#FF4D4F]" : "text-[#75809D]"
-                      }`}
+                      className={`font-poppins-medium text-[11.5px] leading-4 ${passwordError ? "text-[#FF4D4F]" : "text-[#75809D]"
+                        }`}
                     >
                       Password
                     </Text>
@@ -483,6 +540,7 @@ export function AuthScreen({ mode }: AuthScreenProps) {
         mode={mode}
         signIn={signIn}
         signUp={signUp}
+        setActive={setActive}
         onClose={() => setShowVerification(false)}
       />
     </View>
