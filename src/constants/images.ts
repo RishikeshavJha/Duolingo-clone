@@ -8,4 +8,5 @@ export const images = {
   eyeClosed: require("@/assets/images/eye-closed.png"),
   googleLogo: require("@/assets/images/google-logo.png"),
   facebookLogo: require("@/assets/images/facebook-logo.png"),
+  earth: require("@/assets/images/earth.png"),
 } as const;
