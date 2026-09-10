@@ -1,8 +1,9 @@
 import { images } from "@/constants/images";
 import { LANGUAGES } from "@/data/languages";
 import { getLessonsByUnitId } from "@/data/lessons";
-import { getUnitsByLanguageCode } from "@/data/units";
+import { UNITS } from "@/data/units";
 import { useLanguageStore } from "@/store/languageStore";
+import { colors } from "@/theme/tokens";
 import { useUser } from "@clerk/expo";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
@@ -18,58 +19,66 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-/** Greeting mapping according to language code */
-const GREETINGS: Record<string, string> = {
-  es: "Hola",
-  fr: "Bonjour",
-  ja: "Konnichiwa",
-  ko: "Annyeong",
-  de: "Hallo",
-  zh: "Nǐ hǎo",
-};
+/** Greeting helper according to language code */
+function getGreeting(languageCode?: string): string {
+  switch (languageCode) {
+    case "es":
+      return "Hola";
+    case "fr":
+      return "Bonjour";
+    case "ja":
+      return "Konnichiwa";
+    case "ko":
+      return "Annyeong";
+    case "de":
+      return "Hallo";
+    case "zh":
+      return "Nǐ hǎo";
+    default:
+      return "Hola";
+  }
+}
 
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useUser();
   const { selectedLanguage } = useLanguageStore();
 
-  // Active language fallback to Spanish if not chosen yet
-  const currentLanguage = selectedLanguage || LANGUAGES[0];
-  const greeting = GREETINGS[currentLanguage.code] || "Hello";
+  const selectedCode = typeof selectedLanguage === "string" 
+    ? selectedLanguage 
+    : selectedLanguage?.code ?? "es";
 
-  // Display user first name, fallback to "Alex" to match design
-  const displayName =
-    user?.firstName ||
-    user?.fullName?.split(" ")[0] ||
-    user?.primaryEmailAddress?.emailAddress?.split("@")[0] ||
-    "Alex";
+  const language = LANGUAGES.find((l) => l.code === selectedCode) ?? LANGUAGES[0];
+  const unit = UNITS.find((u) => u.languageCode === selectedCode) ?? UNITS[0];
+  const firstName = user?.firstName ?? "Alex";
+  const greeting = getGreeting(selectedCode);
 
-  // Data retrieval
-  const units = useMemo(
-    () => getUnitsByLanguageCode(currentLanguage.code),
-    [currentLanguage.code]
-  );
-  const currentUnit = units[0];
+  const xpToday = 15;
+  const dailyGoal = 20;
+  const xpProgress = dailyGoal > 0 ? Math.min((xpToday / dailyGoal) * 100, 100) : 0;
+
   const lessons = useMemo(
-    () => (currentUnit ? getLessonsByUnitId(currentUnit.id) : []),
-    [currentUnit]
+    () => (unit ? getLessonsByUnitId(unit.id) : []),
+    [unit]
   );
   const currentLesson = lessons[0];
 
-  const currentLevelText = currentUnit
-    ? `A1 • Unit ${currentUnit.unitNumber || 1}`
+  const currentLevelText = unit
+    ? `A1 • Unit ${unit.unitNumber || 1}`
     : "A1 • Unit 3";
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={["top"]}>
+    <SafeAreaView
+      style={{ flex: 1, backgroundColor: colors.neutral.background }}
+      edges={["top"]}
+    >
       <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
       >
-        {/* Top Header */}
-        <View style={styles.headerRow}>
-          <View style={styles.headerLeft}>
+        {/* — Header — */}
+        <View className="flex-row items-center justify-between mb-5">
+          <View className="flex-row items-center gap-[10px]">
             <Pressable
               onPress={() => router.push("/languages")}
               style={({ pressed }) => [
@@ -79,15 +88,22 @@ export default function HomeScreen() {
               accessibilityRole="button"
               accessibilityLabel="Select Language"
             >
-              <Text style={styles.flagText}>{currentLanguage.flag}</Text>
+              {language?.flag.startsWith("http") ? (
+                <Image
+                  source={{ uri: language.flag }}
+                  className="w-[34px] h-[34px] rounded-full"
+                />
+              ) : (
+                <Text style={styles.flagText}>{language?.flag ?? "🇪🇸"}</Text>
+              )}
             </Pressable>
 
             <Text style={styles.greetingText} numberOfLines={1}>
-              {greeting}, {displayName}! 👋
+              {greeting}, {firstName}! 👋
             </Text>
           </View>
 
-          <View style={styles.headerRight}>
+          <View className="flex-row items-center gap-3">
             <View style={styles.streakContainer}>
               <Image
                 source={images.streakFire}
@@ -120,13 +136,18 @@ export default function HomeScreen() {
           <View style={styles.dailyGoalContent}>
             <Text style={styles.dailyGoalLabel}>Daily goal</Text>
             <View style={styles.dailyGoalXpRow}>
-              <Text style={styles.dailyGoalCurrentXp}>15</Text>
-              <Text style={styles.dailyGoalTotalXp}> / 20 XP</Text>
+              <Text style={styles.dailyGoalCurrentXp}>{xpToday}</Text>
+              <Text style={styles.dailyGoalTotalXp}> / {dailyGoal} XP</Text>
             </View>
 
             {/* Progress bar */}
             <View style={styles.progressBarTrack}>
-              <View style={[styles.progressBarFill, { width: "75%" }]} />
+              <View
+                style={[
+                  styles.progressBarFill,
+                  { width: `${xpProgress}%` },
+                ]}
+              />
             </View>
           </View>
 
@@ -141,7 +162,7 @@ export default function HomeScreen() {
         <View style={styles.continueCard}>
           <View style={styles.continueCardContent}>
             <Text style={styles.continueCardSubtitle}>Continue learning</Text>
-            <Text style={styles.continueCardTitle}>{currentLanguage.name}</Text>
+            <Text style={styles.continueCardTitle}>{language.name}</Text>
             <Text style={styles.continueCardLevel}>{currentLevelText}</Text>
 
             <Pressable
@@ -151,7 +172,7 @@ export default function HomeScreen() {
                 pressed && { opacity: 0.9, transform: [{ scale: 0.97 }] },
               ]}
               accessibilityRole="button"
-              accessibilityLabel={`Continue learning ${currentLanguage.name}`}
+              accessibilityLabel={`Continue learning ${language.name}`}
             >
               <Text style={styles.continueButtonText}>Continue</Text>
             </Pressable>
@@ -244,30 +265,10 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
-  },
-  container: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
-  },
-  contentContainer: {
+  scrollContent: {
     paddingHorizontal: 20,
     paddingTop: 10,
     paddingBottom: 24,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 18,
-  },
-  headerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-    marginRight: 10,
   },
   flagButton: {
     width: 36,
@@ -276,7 +277,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#F3F4F6",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 10,
     overflow: "hidden",
   },
   flagText: {
@@ -288,11 +288,6 @@ const styles = StyleSheet.create({
     fontSize: 19,
     color: "#0D132B",
     flexShrink: 1,
-  },
-  headerRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
   },
   streakContainer: {
     flexDirection: "row",
