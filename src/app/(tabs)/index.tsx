@@ -2,13 +2,14 @@ import { images } from "@/constants/images";
 import { LANGUAGES } from "@/data/languages";
 import { getLessonsByUnitId } from "@/data/lessons";
 import { UNITS } from "@/data/units";
+import { posthog } from "@/lib/posthog";
 import { useLanguageStore } from "@/store/languageStore";
 import { colors } from "@/theme/tokens";
 import { useUser } from "@clerk/expo";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
-import React, { useMemo } from "react";
+import { useMemo } from "react";
 import {
   Platform,
   Pressable,
@@ -44,8 +45,8 @@ export default function HomeScreen() {
   const { user } = useUser();
   const { selectedLanguage } = useLanguageStore();
 
-  const selectedCode = typeof selectedLanguage === "string" 
-    ? selectedLanguage 
+  const selectedCode = typeof selectedLanguage === "string"
+    ? selectedLanguage
     : selectedLanguage?.code ?? "es";
 
   const language = LANGUAGES.find((l) => l.code === selectedCode) ?? LANGUAGES[0];
@@ -66,6 +67,14 @@ export default function HomeScreen() {
   const currentLevelText = unit
     ? `A1 • Unit ${unit.unitNumber || 1}`
     : "A1 • Unit 3";
+
+  const openLearning = (entryPoint: "continue" | "view_all" | "lesson" | "vocabulary") => {
+    posthog?.capture("learning_opened", {
+      entry_point: entryPoint,
+      language_code: selectedCode,
+    });
+    router.navigate("/learn");
+  };
 
   return (
     <SafeAreaView
@@ -166,7 +175,7 @@ export default function HomeScreen() {
             <Text style={styles.continueCardLevel}>{currentLevelText}</Text>
 
             <Pressable
-              onPress={() => router.navigate("/learn")}
+              onPress={() => openLearning("continue")}
               style={({ pressed }) => [
                 styles.continueButton,
                 pressed && { opacity: 0.9, transform: [{ scale: 0.97 }] },
@@ -190,7 +199,7 @@ export default function HomeScreen() {
           <View style={styles.planHeaderRow}>
             <Text style={styles.planSectionTitle}>Today&apos;s plan</Text>
             <Pressable
-              onPress={() => router.navigate("/learn")}
+              onPress={() => openLearning("view_all")}
               hitSlop={8}
             >
               <Text style={styles.viewAllText}>View all</Text>
@@ -199,7 +208,7 @@ export default function HomeScreen() {
 
           {/* Plan Item 1: Lesson */}
           <Pressable
-            onPress={() => router.navigate("/learn")}
+            onPress={() => openLearning("lesson")}
             style={({ pressed }) => [
               styles.planItem,
               pressed && { opacity: 0.8 },
@@ -221,7 +230,13 @@ export default function HomeScreen() {
 
           {/* Plan Item 2: AI Conversation */}
           <Pressable
-            onPress={() => router.navigate("/ai-teacher")}
+            onPress={() => {
+              posthog?.capture("ai_teacher_opened", {
+                entry_point: "today_plan",
+                language_code: selectedCode,
+              });
+              router.navigate("/ai-teacher");
+            }}
             style={({ pressed }) => [
               styles.planItem,
               pressed && { opacity: 0.8 },
@@ -239,7 +254,7 @@ export default function HomeScreen() {
 
           {/* Plan Item 3: New Words */}
           <Pressable
-            onPress={() => router.navigate("/learn")}
+            onPress={() => openLearning("vocabulary")}
             style={({ pressed }) => [
               styles.planItem,
               pressed && { opacity: 0.8 },
@@ -267,7 +282,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
-    paddingTop: 10,
+    paddingTop: 25,
     paddingBottom: 24,
   },
   flagButton: {

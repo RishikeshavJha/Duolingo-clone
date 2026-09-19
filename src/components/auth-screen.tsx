@@ -1,4 +1,5 @@
 import { images } from "@/constants/images";
+import { posthog } from "@/lib/posthog";
 import { Pressable, Text, View } from "@/tw";
 import { useClerk, useSignIn, useSignUp, useSSO } from "@clerk/expo";
 import { Image } from "expo-image";
@@ -151,6 +152,10 @@ export function AuthScreen({ mode }: AuthScreenProps) {
             await setActive({ session: signUp.createdSessionId });
           }
           await signUp.finalize();
+          posthog?.capture("account_authenticated", {
+            authentication_method: "password",
+            account_action: "sign_up",
+          });
           router.replace("/");
           return;
         }
@@ -184,6 +189,10 @@ export function AuthScreen({ mode }: AuthScreenProps) {
             await setActive({ session: signIn.createdSessionId });
           }
           await signIn.finalize();
+          posthog?.capture("account_authenticated", {
+            authentication_method: "password",
+            account_action: "sign_in",
+          });
           router.replace("/");
         } else if (
           signIn.status === "needs_second_factor" ||
@@ -226,6 +235,9 @@ export function AuthScreen({ mode }: AuthScreenProps) {
         if (activeFn) {
           await activeFn({ session: createdSessionId });
         }
+        posthog?.capture("account_authenticated", {
+          authentication_method: strategy.replace("oauth_", ""),
+        });
         router.replace("/");
       } else if (ssoSignUp?.status === "missing_requirements") {
         setApiError("Cannot complete sign-in. Missing account requirements.");

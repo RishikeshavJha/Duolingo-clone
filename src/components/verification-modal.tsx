@@ -1,3 +1,4 @@
+import { posthog } from "@/lib/posthog";
 import { Pressable, Text, View } from "@/tw";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
@@ -137,6 +138,10 @@ export function VerificationModal({
             await setActive({ session: signUp.createdSessionId });
           }
           await signUp.finalize();
+          posthog?.capture("account_authenticated", {
+            authentication_method: "email_verification",
+            account_action: "sign_up",
+          });
           if (onClose) onClose();
           setTimeout(() => router.replace("/"), 150);
         } else {
@@ -161,6 +166,10 @@ export function VerificationModal({
             await setActive({ session: signIn.createdSessionId });
           }
           await signIn.finalize();
+          posthog?.capture("account_authenticated", {
+            authentication_method: "email_verification",
+            account_action: "sign_in",
+          });
           if (onClose) onClose();
           setTimeout(() => router.replace("/"), 150);
         } else {

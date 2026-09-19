@@ -1,3 +1,4 @@
+import { posthog } from "@/lib/posthog";
 import { useLanguageStore } from "@/store/languageStore";
 import { useAuth, useUser } from "@clerk/expo";
 import { Pressable, Text, View } from "react-native";
@@ -39,7 +40,10 @@ export default function ProfileScreen() {
 
         <View className="w-full">
           <Pressable
-            onPress={() => signOut()}
+            onPress={() => {
+              posthog?.capture("user_signed_out");
+              signOut();
+            }}
             className="w-full h-[52px] items-center justify-center rounded-[18px] bg-[#FFF0F0] border border-[#FFE0E0] active:opacity-80"
           >
             <Text className="font-poppins-semibold text-[16px] text-[#FF4D4F]">

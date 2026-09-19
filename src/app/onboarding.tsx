@@ -1,4 +1,5 @@
 import { images } from "@/constants/images";
+import { posthog } from "@/lib/posthog";
 import { Pressable, Text, View } from "@/tw";
 import { Image } from "expo-image";
 import { Link } from "expo-router";
@@ -60,7 +61,10 @@ export default function OnboardingScreen() {
         </View>
 
         <Link href="/sign-up" asChild>
-          <Pressable className="relative mt-auto items-center rounded-[24px] bg-lingua-purple py-5 shadow-button">
+          <Pressable
+            onPress={() => posthog?.capture("onboarding_started")}
+            className="relative mt-auto items-center rounded-[24px] bg-lingua-purple py-5 shadow-button"
+          >
             <Text className="font-poppins-semibold text-[24px] leading-8 text-white">Get Started</Text>
             <Text className="absolute right-10 top-[15px] font-poppins text-[42px] leading-[40px] text-white">›</Text>
           </Pressable>

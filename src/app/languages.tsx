@@ -1,5 +1,6 @@
 import { images } from "@/constants/images";
 import { LANGUAGES } from "@/data/languages";
+import { posthog } from "@/lib/posthog";
 import { Image } from "expo-image";
 import { router } from "expo-router";
 import { useState } from "react";
@@ -31,6 +32,9 @@ export default function LanguagesScreen() {
       const lang = LANGUAGES.find((l) => l.code === selected);
       if (lang) {
         setLanguage(lang);
+        posthog?.capture("language_selected", {
+          language_code: lang.code,
+        });
       }
     }
     router.replace("/");
@@ -45,7 +49,7 @@ export default function LanguagesScreen() {
           alignItems: "center",
           justifyContent: "center",
           paddingHorizontal: 16,
-          paddingTop: 6,
+          paddingTop: 12,
           paddingBottom: 10,
           position: "relative",
         }}
