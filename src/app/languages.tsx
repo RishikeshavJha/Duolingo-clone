@@ -51,7 +51,11 @@ export default function LanguagesScreen() {
         }}
       >
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            }
+          }}
           hitSlop={14}
           style={{
             position: "absolute",
